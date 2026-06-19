@@ -75,11 +75,16 @@ def get_current_user(
 
 
 def get_current_school_id(
-    current_user: User = Depends(get_current_user),
+    # Set use_cache=False to force FastAPI to read the freshly processed object state
+    current_user: User = Depends(get_current_user, use_cache=False),
 ):
+    # Extract raw string value whether it's an Enum object or a standard text string
+    role_str = getattr(current_user.role, "value", current_user.role).lower()
+
+    if role_str == "super_admin":
+        return None
 
     if current_user.school_id is None:
-
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User has no school assigned",

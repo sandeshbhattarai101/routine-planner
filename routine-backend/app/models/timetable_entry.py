@@ -1,6 +1,7 @@
 import uuid
 
 from sqlalchemy import ForeignKey
+from sqlalchemy import UniqueConstraint
 
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -14,6 +15,16 @@ from app.core.database import Base
 
 class TimetableEntry(Base):
     __tablename__ = "timetable_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "timetable_id", "teacher_id", "working_day_id", "period_id",
+            name="uq_timetable_entries_teacher_slot"
+        ),
+        UniqueConstraint(
+            "timetable_id", "section_id", "working_day_id", "period_id",
+            name="uq_timetable_entries_section_slot"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

@@ -4,6 +4,7 @@ from app.models.class_subject import ClassSubject
 from app.models.teacher_subject import TeacherSubject
 from app.models.working_day import WorkingDay
 from app.models.period import Period
+from app.models.teacher import Teacher
 
 from app.timetable.services.timetable_factory import (
     TimetableFactory
@@ -35,11 +36,13 @@ class TimetableGenerator:
 
     def __init__(
         self,
-        db: Session
+        db: Session,
+        school_id
     ):
         self.db = db
+        self.school_id = school_id
 
-    
+
     def load_slots(self):
 
         slots = []
@@ -49,6 +52,7 @@ class TimetableGenerator:
                 WorkingDay
             )
             .filter(
+                WorkingDay.school_id == self.school_id,
                 WorkingDay.is_active == True
             )
             .all()
@@ -59,6 +63,7 @@ class TimetableGenerator:
                 Period
             )
             .filter(
+                Period.school_id == self.school_id,
                 Period.is_break == False
             )
             .all()
@@ -86,7 +91,11 @@ class TimetableGenerator:
         class_subjects = (
             self.db.query(
                 ClassSubject
-            ).all()
+            )
+            .filter(
+                ClassSubject.school_id == self.school_id
+            )
+            .all()
         )
 
         for cs in class_subjects:
@@ -96,6 +105,7 @@ class TimetableGenerator:
                     TeacherSubject
                 )
                 .filter(
+                    TeacherSubject.school_id == self.school_id,
                     TeacherSubject.subject_id
                     == cs.subject_id
                 )
@@ -104,6 +114,14 @@ class TimetableGenerator:
 
             if not teacher_subject:
                 continue
+
+            teacher = (
+                self.db.query(Teacher)
+                .filter(
+                    Teacher.id == teacher_subject.teacher_id
+                )
+                .first()
+            )
 
             requirements.append(
                 SubjectRequirement(
@@ -124,7 +142,10 @@ class TimetableGenerator:
                     ),
 
                     periods_required=
-                        cs.periods_per_week
+                        cs.periods_per_week,
+
+                    max_periods_per_day=
+                        teacher.max_periods_per_day
                 )
             )
 
@@ -191,7 +212,7 @@ class TimetableGenerator:
     
 
 
-    def generate(self):
+    def generate(self, academic_year_id):
 
         requirements = (
             self.load_requirements()
@@ -223,7 +244,7 @@ class TimetableGenerator:
         timetable = (
             TimetableFactory.create(
                 db=self.db,
-                school_id=school_id,
+                school_id=self.school_id,
                 academic_year_id=
                     academic_year_id
             )
@@ -232,6 +253,7 @@ class TimetableGenerator:
         saved_count = (
             TimetablePersistence.save_entries(
                 db=self.db,
+                school_id=self.school_id,
                 timetable_id=timetable.id,
                 entries=entries
             )
@@ -244,7 +266,3 @@ class TimetableGenerator:
             "entries_saved":
                 saved_count
         }
-
-
-
-        return entries

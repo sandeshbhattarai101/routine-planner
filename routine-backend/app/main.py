@@ -4,6 +4,7 @@ from app.api.routes import upload
 from app.api.routes import mappings
 from app.api.routes import imports
 from app.api.routes import timetable
+from app.api.routes import lookup
 from app.api.routes import users
 
 from app.api.routes import schools
@@ -34,6 +35,7 @@ app.include_router(imports.router)
 app.include_router(upload.router)
 app.include_router(mappings.router)
 app.include_router(timetable.router)
+app.include_router(lookup.router)
 app.include_router(
     users.router
 )

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import SchoolForm from "@/components/schools/SchoolForm";
 import SchoolTable from "@/components/schools/SchoolTable";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { School } from "@/types/school";
 import {
   createSchool,
@@ -36,21 +37,34 @@ export default function SchoolsPage() {
   }
 
   return (
-    <div>
-      {/* Fixed: Single line class string to prevent hydration mismatch */}
-      <h1 className="text-3xl font-bold mb-6">
-        Schools
-      </h1>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold">Schools</h1>
+        <p className="text-sm text-muted-foreground">
+          Create and manage the schools on this platform.
+        </p>
+      </div>
 
-      <SchoolForm
-        initialName={editing?.name}
-        onSubmit={editing ? handleEdit : handleCreate}
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle>{editing ? `Edit "${editing.name}"` : "Add a school"}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <SchoolForm
+            initialName={editing?.name}
+            onSubmit={editing ? handleEdit : handleCreate}
+          />
+        </CardContent>
+      </Card>
 
-      <SchoolTable
-        schools={schools}
-        onEdit={setEditing}
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle>All schools</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <SchoolTable schools={schools} onEdit={setEditing} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

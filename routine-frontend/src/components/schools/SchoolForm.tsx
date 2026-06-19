@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 interface Props {
   initialName?: string;
@@ -37,41 +39,17 @@ export default function SchoolForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="
-      flex
-      gap-3
-      mb-6
-      "
-    >
-      <input
+    <form onSubmit={handleSubmit} className="mb-6 flex gap-3">
+      <Input
         value={name}
-        onChange={(e) =>
-          setName(e.target.value)
-        }
-        placeholder="School Name"
-        className="
-        border
-        p-2
-        flex-1
-        "
+        onChange={(e) => setName(e.target.value)}
+        placeholder="School name"
+        className="flex-1"
       />
 
-      <button
-        disabled={loading}
-        className="
-        rounded
-        bg-black
-        px-4
-        py-2
-        text-white
-        "
-      >
-        {loading
-          ? "Saving..."
-          : "Save"}
-      </button>
+      <Button disabled={loading}>
+        {loading ? "Saving..." : "Save"}
+      </Button>
     </form>
   );
 }

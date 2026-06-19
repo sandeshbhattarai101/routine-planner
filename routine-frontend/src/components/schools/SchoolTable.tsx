@@ -1,6 +1,15 @@
 "use client";
 
 import { School } from "@/types/school";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 
 interface Props {
   schools: School[];
@@ -12,55 +21,51 @@ export default function SchoolTable({
   schools,
   onEdit,
 }: Props) {
+  if (schools.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">No schools yet.</p>
+    );
+  }
+
   return (
-    <table className="w-full border">
-      <thead>
-        <tr>
-          <th className="border p-2">
-            Name
-          </th>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Name</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead></TableHead>
+        </TableRow>
+      </TableHeader>
 
-          <th className="border p-2">
-            Status
-          </th>
-
-          <th className="border p-2">
-            Action
-          </th>
-        </tr>
-      </thead>
-
-      <tbody>
+      <TableBody>
         {schools.map((school) => (
-          <tr key={school.id}>
-            <td className="border p-2">
-              {school.name}
-            </td>
+          <TableRow key={school.id}>
+            <TableCell className="font-medium">{school.name}</TableCell>
 
-            <td className="border p-2">
-              {school.is_active
-                ? "Active"
-                : "Inactive"}
-            </td>
-
-            <td className="border p-2">
-              <button
-                onClick={() =>
-                  onEdit(school)
+            <TableCell>
+              <span
+                className={
+                  school.is_active
+                    ? "text-emerald-600"
+                    : "text-muted-foreground"
                 }
-                className="
-                rounded
-                border
-                px-3
-                py-1
-                "
+              >
+                {school.is_active ? "Active" : "Inactive"}
+              </span>
+            </TableCell>
+
+            <TableCell>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onEdit(school)}
               >
                 Edit
-              </button>
-            </td>
-          </tr>
+              </Button>
+            </TableCell>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }

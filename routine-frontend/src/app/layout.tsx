@@ -4,6 +4,8 @@ import {
   AuthProvider
 } from "@/context/AuthContext";
 
+import AppShell from "@/components/layout/AppShell";
+
 export default function RootLayout({
   children,
 }: {
@@ -18,7 +20,9 @@ export default function RootLayout({
 
         <AuthProvider>
 
-          {children}
+          <AppShell>
+            {children}
+          </AppShell>
 
         </AuthProvider>
 

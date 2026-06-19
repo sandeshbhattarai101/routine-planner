@@ -8,6 +8,7 @@ class TimetablePersistence:
     @staticmethod
     def save_entries(
         db,
+        school_id,
         timetable_id,
         entries
     ):
@@ -18,6 +19,7 @@ class TimetablePersistence:
 
             objects.append(
                 TimetableEntry(
+                    school_id=school_id,
                     timetable_id=timetable_id,
                     classroom_id=
                         entry["classroom_id"],

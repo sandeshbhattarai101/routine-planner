@@ -7,6 +7,11 @@ import {
   useState,
 } from "react";
 
+import {
+  usePathname,
+  useRouter,
+} from "next/navigation";
+
 import { User } from "@/types/user";
 
 import {
@@ -21,6 +26,9 @@ interface AuthContextType {
 
   refreshUser:
     () => Promise<void>;
+
+  logout:
+    () => void;
 }
 
 const AuthContext =
@@ -30,12 +38,21 @@ const AuthContext =
     {} as AuthContextType
   );
 
+export const PUBLIC_PATHS = [
+  "/auth/login",
+  "/register-school",
+];
+
 export function AuthProvider({
   children,
 }: {
   children:
     React.ReactNode;
 }) {
+
+  const router = useRouter();
+
+  const pathname = usePathname();
 
   const [user, setUser] =
     useState<User | null>(
@@ -64,11 +81,40 @@ export function AuthProvider({
     }
   }
 
+  function logout() {
+
+    localStorage.removeItem(
+      "token"
+    );
+
+    setUser(null);
+
+    router.push(
+      "/auth/login"
+    );
+  }
+
   useEffect(() => {
 
     refreshUser();
 
   }, []);
+
+  useEffect(() => {
+
+    if (loading) return;
+
+    if (
+      !user &&
+      !PUBLIC_PATHS.includes(pathname)
+    ) {
+
+      router.replace(
+        "/auth/login"
+      );
+    }
+
+  }, [user, loading, pathname]);
 
   return (
 
@@ -77,6 +123,7 @@ export function AuthProvider({
         user,
         loading,
         refreshUser,
+        logout,
       }}
     >
 

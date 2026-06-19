@@ -3,6 +3,15 @@
 import { useState } from "react";
 
 import { School } from "@/types/school";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Props {
 
@@ -62,13 +71,10 @@ export default function SchoolAdminForm({
 
     <form
       onSubmit={handleSubmit}
-      className="
-      space-y-4
-      mb-8
-      "
+      className="grid gap-3 sm:grid-cols-2"
     >
 
-      <input
+      <Input
         value={email}
         onChange={(e) =>
           setEmail(
@@ -76,14 +82,9 @@ export default function SchoolAdminForm({
           )
         }
         placeholder="Email"
-        className="
-        border
-        p-2
-        w-full
-        "
       />
 
-      <input
+      <Input
         type="password"
         value={password}
         onChange={(e) =>
@@ -92,60 +93,26 @@ export default function SchoolAdminForm({
           )
         }
         placeholder="Password"
-        className="
-        border
-        p-2
-        w-full
-        "
       />
 
-      <select
-        value={schoolId}
-        onChange={(e) =>
-          setSchoolId(
-            e.target.value
-          )
-        }
-        className="
-        border
-        p-2
-        w-full
-        "
-      >
-
-        <option value="">
-          Select School
-        </option>
-
-        {schools.map(
-          (school) => (
-
-            <option
-              key={school.id}
-              value={school.id}
-            >
+      <Select value={schoolId} onValueChange={setSchoolId}>
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Select school" />
+        </SelectTrigger>
+        <SelectContent>
+          {schools.map((school) => (
+            <SelectItem key={school.id} value={school.id}>
               {school.name}
-            </option>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
-          )
-        )}
-
-      </select>
-
-      <button
-        disabled={loading}
-        className="
-        bg-black
-        text-white
-        px-4
-        py-2
-        rounded
-        "
-      >
+      <Button disabled={loading} className="sm:w-fit">
         {loading
           ? "Creating..."
-          : "Create Admin"}
-      </button>
+          : "Create admin"}
+      </Button>
 
     </form>
   );

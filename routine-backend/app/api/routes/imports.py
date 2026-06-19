@@ -5,6 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 
+from app.core.permissions import school_admin_only
+from app.core.dependencies import get_current_school_id
+
 from app.schemas.import_processor import (
     ImportRequest
 )
@@ -33,13 +36,15 @@ def get_db():
 @router.post("/process")
 def process_import(
     request: ImportRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    school_id=Depends(get_current_school_id),
+    _=Depends(school_admin_only)
 ):
 
     imported_count = (
         ImportProcessor.process(
             db=db,
-            school_id=request.school_id,
+            school_id=school_id,
             entity_type=request.entity_type,
             rows=request.rows
         )

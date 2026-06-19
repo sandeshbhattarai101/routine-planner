@@ -125,7 +125,7 @@ class Scheduler:
                             self.daily_loads,
                             requirement.teacher_id,
                             slot.day_id,
-                            5
+                            requirement.max_periods_per_day
                         )
                     )
 

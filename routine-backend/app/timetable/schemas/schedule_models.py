@@ -20,3 +20,5 @@ class SubjectRequirement:
     teacher_id: str
 
     periods_required: int
+
+    max_periods_per_day: int = 5

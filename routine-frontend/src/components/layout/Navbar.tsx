@@ -1,56 +1,23 @@
 "use client";
 
-import {
-  useRouter
-} from "next/navigation";
-
-import {
-  useAuth
-} from "@/context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
+import { Button } from "@/components/ui/button";
+import BackButton from "@/components/layout/BackButton";
 
 export default function Navbar() {
-
-  const router =
-    useRouter();
-
-  const { user } =
-    useAuth();
-
-  function logout() {
-
-    localStorage.removeItem(
-      "token"
-    );
-
-    router.push(
-      "/auth/login"
-    );
-  }
+  const { user, logout } = useAuth();
 
   return (
+    <div className="flex items-center justify-between border-b bg-background px-4 py-3">
+      <BackButton />
 
-    <div
-      className="
-      flex
-      justify-between
-      items-center
-      border-b
-      p-4
-      "
-    >
+      <div className="flex items-center gap-3">
+        <span className="text-sm text-muted-foreground">{user?.email}</span>
 
-      <div>
-
-        {user?.email}
-
+        <Button variant="outline" size="sm" onClick={logout}>
+          Logout
+        </Button>
       </div>
-
-      <button
-        onClick={logout}
-      >
-        Logout
-      </button>
-
     </div>
   );
 }

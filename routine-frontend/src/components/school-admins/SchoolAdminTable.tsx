@@ -2,6 +2,15 @@
 
 import { SchoolAdmin } from "@/types/schoolAdmin";
 import { School } from "@/types/school";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 
 interface Props {
 
@@ -38,61 +47,61 @@ export default function SchoolAdminTable({
     );
   }
 
+  if (admins.length === 0) {
+    return <p className="text-sm text-muted-foreground">No school admins yet.</p>;
+  }
+
   return (
 
-    <table
-      className="
-      w-full
-      border
-      "
-    >
+    <Table>
 
-      <thead>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Email</TableHead>
+          <TableHead>School</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead></TableHead>
+        </TableRow>
+      </TableHeader>
 
-        <tr>
-
-          <th>Email</th>
-
-          <th>School</th>
-
-          <th>Status</th>
-
-          <th>Actions</th>
-
-        </tr>
-
-      </thead>
-
-      <tbody>
+      <TableBody>
 
         {admins.map(
           (admin) => (
 
-            <tr key={admin.id}>
+            <TableRow key={admin.id}>
 
-              <td>
+              <TableCell className="font-medium">
                 {admin.email}
-              </td>
+              </TableCell>
 
-              <td>
+              <TableCell>
                 {getSchoolName(
                   admin.school_id
                 )}
-              </td>
+              </TableCell>
 
-              <td>
+              <TableCell>
+                <span
+                  className={
+                    admin.is_active
+                      ? "text-emerald-600"
+                      : "text-muted-foreground"
+                  }
+                >
+                  {admin.is_active
+                    ? "Active"
+                    : "Inactive"}
+                </span>
+              </TableCell>
 
-                {admin.is_active
-                  ? "Active"
-                  : "Inactive"}
-
-              </td>
-
-              <td>
+              <TableCell>
 
                 {admin.is_active ? (
 
-                  <button
+                  <Button
+                    variant="destructive"
+                    size="sm"
                     onClick={() =>
                       onDeactivate(
                         admin.id
@@ -100,11 +109,13 @@ export default function SchoolAdminTable({
                     }
                   >
                     Deactivate
-                  </button>
+                  </Button>
 
                 ) : (
 
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() =>
                       onActivate(
                         admin.id
@@ -112,19 +123,19 @@ export default function SchoolAdminTable({
                     }
                   >
                     Activate
-                  </button>
+                  </Button>
 
                 )}
 
-              </td>
+              </TableCell>
 
-            </tr>
+            </TableRow>
 
           )
         )}
 
-      </tbody>
+      </TableBody>
 
-    </table>
+    </Table>
   );
 }
