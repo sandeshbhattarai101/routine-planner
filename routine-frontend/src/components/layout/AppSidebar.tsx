@@ -55,7 +55,9 @@ export default function AppSidebar() {
         {user?.role === "SCHOOL_ADMIN" && (
           <>
             <NavLink href="/teachers">Teachers</NavLink>
+            <NavLink href="/classes">Classes & Sections</NavLink>
             <NavLink href="/subjects">Subjects</NavLink>
+            <NavLink href="/curriculum">Curriculum</NavLink>
             <NavLink href="/uploads">Upload Excel</NavLink>
             <NavLink href="/timetable">Timetable</NavLink>
           </>

@@ -1,10 +1,12 @@
 from sqlalchemy.orm import Session
 
+from app.models.timetable import Timetable
 from app.models.timetable_entry import (
     TimetableEntry
 )
 from app.models.teacher import Teacher
 from app.models.period import Period
+from app.models.classroom import Classroom
 from app.models.teacher_availability import TeacherAvailability
 from app.models.class_availability import ClassAvailability
 
@@ -12,6 +14,7 @@ from app.timetable.validators.conflict_validator import ConflictValidator
 from app.timetable.validators.availability_validator import AvailabilityValidator
 from app.timetable.validators.load_validator import LoadValidator
 from app.timetable.validators.distribution_validator import DistributionValidator
+from app.timetable.validators.time_window_validator import TimeWindowValidator
 
 
 class TimetableService:
@@ -81,6 +84,20 @@ class TimetableService:
             raise ValueError("Period not found.")
         if period.is_break:
             raise ValueError("Cannot schedule an entry during a break period.")
+
+        classroom = (
+            db.query(Classroom)
+            .filter(Classroom.id == data.classroom_id, Classroom.school_id == school_id)
+            .first()
+        )
+        if not classroom:
+            raise ValueError("Classroom not found.")
+        if not TimeWindowValidator.within_window(
+            period.start_time, period.end_time, classroom.start_time, classroom.end_time
+        ):
+            raise ValueError(
+                "This period falls outside the class's configured daily time range."
+            )
 
         teacher = (
             db.query(Teacher)
@@ -208,6 +225,44 @@ class TimetableService:
         db.refresh(entry)
 
         return entry
+
+    @staticmethod
+    def rename_timetable(db: Session, school_id, timetable_id, name):
+        timetable = (
+            db.query(Timetable)
+            .filter(Timetable.id == timetable_id, Timetable.school_id == school_id)
+            .first()
+        )
+        if not timetable:
+            raise ValueError("Timetable not found.")
+
+        name = name.strip()
+        if not name:
+            raise ValueError("Name cannot be empty.")
+
+        timetable.name = name
+        db.commit()
+        db.refresh(timetable)
+
+        return timetable
+
+    @staticmethod
+    def delete_timetable(db: Session, school_id, timetable_id):
+        timetable = (
+            db.query(Timetable)
+            .filter(Timetable.id == timetable_id, Timetable.school_id == school_id)
+            .first()
+        )
+        if not timetable:
+            raise ValueError("Timetable not found.")
+
+        db.query(TimetableEntry).filter(
+            TimetableEntry.timetable_id == timetable_id,
+            TimetableEntry.school_id == school_id
+        ).delete()
+
+        db.delete(timetable)
+        db.commit()
 
     @staticmethod
     def delete_entry(db: Session, school_id, entry_id):

@@ -5,6 +5,7 @@ from app.models.classroom import Classroom
 from app.models.section import Section
 from app.models.subject import Subject
 from app.models.class_subject import ClassSubject
+from app.models.teacher_subject import TeacherSubject
 
 class ImportProcessor:
 
@@ -168,13 +169,29 @@ class ImportProcessor:
             if not subject:
                 raise ValueError(f"Row {index + 1}: subject '{subject_name}' not found.")
 
+            teacher_id = None
+            teacher_name = row.get("teacher_name")
+            if teacher_name:
+                teacher = (
+                    db.query(Teacher)
+                    .filter(Teacher.school_id == school_id, Teacher.name == teacher_name)
+                    .first()
+                )
+                if not teacher:
+                    raise ValueError(f"Row {index + 1}: teacher '{teacher_name}' not found.")
+                teacher_id = teacher.id
+
+            days_per_week = row.get("days_per_week")
+
             class_subjects.append(
                 ClassSubject(
                     school_id=school_id,
                     classroom_id=classroom.id,
                     section_id=section.id,
                     subject_id=subject.id,
-                    periods_per_week=int(periods_per_week)
+                    teacher_id=teacher_id,
+                    periods_per_week=int(periods_per_week),
+                    days_per_week=int(days_per_week) if days_per_week else None
                 )
             )
 
@@ -182,6 +199,48 @@ class ImportProcessor:
         db.commit()
 
         return len(class_subjects)
+
+    @staticmethod
+    def import_teacher_subjects(db: Session, school_id, rows):
+        teacher_subjects = []
+
+        for index, row in enumerate(rows):
+            teacher_name = row.get("teacher_name")
+            subject_name = row.get("subject_name")
+
+            if not teacher_name or not subject_name:
+                raise ValueError(
+                    f"Import failed: required fields missing or null on row {index + 1}."
+                )
+
+            teacher = (
+                db.query(Teacher)
+                .filter(Teacher.school_id == school_id, Teacher.name == teacher_name)
+                .first()
+            )
+            if not teacher:
+                raise ValueError(f"Row {index + 1}: teacher '{teacher_name}' not found.")
+
+            subject = (
+                db.query(Subject)
+                .filter(Subject.school_id == school_id, Subject.name == subject_name)
+                .first()
+            )
+            if not subject:
+                raise ValueError(f"Row {index + 1}: subject '{subject_name}' not found.")
+
+            teacher_subjects.append(
+                TeacherSubject(
+                    school_id=school_id,
+                    teacher_id=teacher.id,
+                    subject_id=subject.id,
+                )
+            )
+
+        db.add_all(teacher_subjects)
+        db.commit()
+
+        return len(teacher_subjects)
 
     @staticmethod
     def process(db: Session, school_id, entity_type, rows):
@@ -207,6 +266,7 @@ class ImportProcessor:
             "section": ["name", "classroom_name"],
             "subject": ["name"],
             "class_subject": ["classroom_name", "section_name", "subject_name", "periods_per_week"],
+            "teacher_subject": ["teacher_name", "subject_name"],
         }
         required_fields = required_fields_map.get(entity_type, [])
 
@@ -226,5 +286,7 @@ class ImportProcessor:
             return ImportProcessor.import_subjects(db, school_id, transformed_rows)
         if entity_type == "class_subject":
             return ImportProcessor.import_class_subjects(db, school_id, transformed_rows)
+        if entity_type == "teacher_subject":
+            return ImportProcessor.import_teacher_subjects(db, school_id, transformed_rows)
 
         raise ValueError(f"Unsupported entity type: {entity_type}")

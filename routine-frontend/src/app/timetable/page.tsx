@@ -4,22 +4,26 @@ import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import {
   Lookup,
+  Period,
   TimetableSummary,
   TimetableEntry,
   getAcademicYears,
   getWorkingDays,
   createWorkingDay,
+  deleteWorkingDay,
   getPeriods,
   createPeriod,
+  updatePeriodBreak,
+  deletePeriod,
   getClassrooms,
   getSections,
   getSubjects,
   getTeachers,
   getTimetables,
   createTimetable,
+  deleteTimetable,
+  renameTimetable,
   getTimetableEntries,
-  createTimetableEntry,
-  deleteTimetableEntry,
   generateTimetable,
 } from "@/services/timetable_service";
 import {
@@ -31,6 +35,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -50,9 +55,7 @@ import {
 export default function Page() {
   const [academicYears, setAcademicYears] = useState<Lookup[]>([]);
   const [workingDays, setWorkingDays] = useState<Lookup[]>([]);
-  const [periods, setPeriods] = useState<(Lookup & { is_break: boolean })[]>(
-    []
-  );
+  const [periods, setPeriods] = useState<Period[]>([]);
   const [classrooms, setClassrooms] = useState<Lookup[]>([]);
   const [sections, setSections] = useState<
     (Lookup & { classroom_id: string })[]
@@ -62,6 +65,8 @@ export default function Page() {
 
   const [timetables, setTimetables] = useState<TimetableSummary[]>([]);
   const [selectedTimetableId, setSelectedTimetableId] = useState<string>("");
+  const [renamingTimetableId, setRenamingTimetableId] = useState<string>("");
+  const [renameDraft, setRenameDraft] = useState<string>("");
   const [entries, setEntries] = useState<TimetableEntry[]>([]);
 
   const [newYearName, setNewYearName] = useState("");
@@ -70,39 +75,52 @@ export default function Page() {
     name: "",
     start_time: "",
     end_time: "",
+    is_break: false,
   });
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generateMessage, setGenerateMessage] = useState("");
+  const [generateError, setGenerateError] = useState("");
+  const [generateWarnings, setGenerateWarnings] = useState<string[]>([]);
 
-  const [form, setForm] = useState({
-    working_day_id: "",
-    period_id: "",
-    classroom_id: "",
-    section_id: "",
-    teacher_id: "",
-    subject_id: "",
-  });
+  function errorMessage(err: unknown, fallback: string): string {
+    if (
+      typeof err === "object" &&
+      err !== null &&
+      "response" in err &&
+      typeof (err as { response?: { data?: { detail?: string } } }).response
+        ?.data?.detail === "string"
+    ) {
+      return (err as { response: { data: { detail: string } } }).response.data
+        .detail;
+    }
+    return fallback;
+  }
 
   async function loadLookups() {
-    const [ay, wd, pe, cl, se, su, te, tt] = await Promise.all([
-      getAcademicYears(),
-      getWorkingDays(),
-      getPeriods(),
-      getClassrooms(),
-      getSections(),
-      getSubjects(),
-      getTeachers(),
-      getTimetables(),
-    ]);
-    setAcademicYears(ay);
-    setWorkingDays(wd);
-    setPeriods(pe);
-    setClassrooms(cl);
-    setSections(se);
-    setSubjects(su);
-    setTeachers(te);
-    setTimetables(tt);
+    setError("");
+    try {
+      const [ay, wd, pe, cl, se, su, te, tt] = await Promise.all([
+        getAcademicYears(),
+        getWorkingDays(),
+        getPeriods(),
+        getClassrooms(),
+        getSections(),
+        getSubjects(),
+        getTeachers(),
+        getTimetables(),
+      ]);
+      setAcademicYears(ay);
+      setWorkingDays(wd);
+      setPeriods(pe);
+      setClassrooms(cl);
+      setSections(se);
+      setSubjects(su);
+      setTeachers(te);
+      setTimetables(tt);
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to load timetable setup data."));
+    }
   }
 
   useEffect(() => {
@@ -110,199 +128,416 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    if (selectedTimetableId) {
-      getTimetableEntries(selectedTimetableId).then(setEntries);
-    } else {
+    if (!selectedTimetableId) {
       setEntries([]);
+      return;
     }
+    getTimetableEntries(selectedTimetableId)
+      .then(setEntries)
+      .catch((err: unknown) => {
+        setError(errorMessage(err, "Failed to load timetable entries."));
+      });
   }, [selectedTimetableId]);
 
   async function handleCreateAcademicYear() {
     if (!newYearName) return;
-    await api.post("/academic-years", { name: newYearName });
-    setNewYearName("");
-    loadLookups();
+    setError("");
+    try {
+      await api.post("/academic-years", { name: newYearName });
+      setNewYearName("");
+      await loadLookups();
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to add academic year."));
+    }
   }
 
   async function handleCreateTimetable() {
     if (academicYears.length === 0) return;
-    const timetable = await createTimetable(academicYears[0].id);
-    setTimetables([...timetables, timetable]);
-    setSelectedTimetableId(timetable.id);
+    setError("");
+    try {
+      const timetable = await createTimetable(academicYears[0].id);
+      setTimetables([...timetables, timetable]);
+      setSelectedTimetableId(timetable.id);
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to create timetable."));
+    }
+  }
+
+  async function handleDeleteTimetable(timetableId: string) {
+    setError("");
+    try {
+      await deleteTimetable(timetableId);
+      setTimetables((prev) => prev.filter((t) => t.id !== timetableId));
+      if (selectedTimetableId === timetableId) {
+        setSelectedTimetableId("");
+      }
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to delete timetable."));
+    }
+  }
+
+  function handleStartRename(timetableId: string, currentName: string) {
+    setRenamingTimetableId(timetableId);
+    setRenameDraft(currentName);
+  }
+
+  function handleCancelRename() {
+    setRenamingTimetableId("");
+    setRenameDraft("");
+  }
+
+  async function handleSaveRename(timetableId: string) {
+    if (!renameDraft.trim()) return;
+    setError("");
+    try {
+      const updated = await renameTimetable(timetableId, renameDraft.trim());
+      setTimetables((prev) =>
+        prev.map((t) => (t.id === timetableId ? updated : t))
+      );
+      setRenamingTimetableId("");
+      setRenameDraft("");
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to rename timetable."));
+    }
   }
 
   async function handleCreateWorkingDay() {
     if (!newDayName) return;
-    await createWorkingDay(newDayName);
-    setNewDayName("");
-    loadLookups();
+    setError("");
+    try {
+      await createWorkingDay(newDayName);
+      setNewDayName("");
+      await loadLookups();
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to add working day."));
+    }
   }
 
   async function handleCreatePeriod() {
     if (!newPeriod.name || !newPeriod.start_time || !newPeriod.end_time) return;
-    await createPeriod(
-      newPeriod.name,
-      newPeriod.start_time,
-      newPeriod.end_time,
-      false
-    );
-    setNewPeriod({ name: "", start_time: "", end_time: "" });
-    loadLookups();
+    setError("");
+    try {
+      await createPeriod(
+        newPeriod.name,
+        newPeriod.start_time,
+        newPeriod.end_time,
+        newPeriod.is_break
+      );
+      setNewPeriod({ name: "", start_time: "", end_time: "", is_break: false });
+      await loadLookups();
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to add period."));
+    }
+  }
+
+  async function handleToggleBreak(periodId: string, isBreak: boolean) {
+    setError("");
+    try {
+      await updatePeriodBreak(periodId, isBreak);
+      await loadLookups();
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to update period."));
+    }
+  }
+
+  async function handleDeletePeriod(periodId: string) {
+    setError("");
+    try {
+      await deletePeriod(periodId);
+      await loadLookups();
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to delete period."));
+    }
+  }
+
+  async function handleDeleteWorkingDay(dayId: string) {
+    setError("");
+    try {
+      await deleteWorkingDay(dayId);
+      await loadLookups();
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to delete working day."));
+    }
   }
 
   async function handleGenerate() {
     if (academicYears.length === 0) return;
     setGenerating(true);
     setGenerateMessage("");
+    setGenerateError("");
+    setGenerateWarnings([]);
     try {
       const result = await generateTimetable(academicYears[0].id);
       setGenerateMessage(`Generated ${result.entries_saved} entries.`);
-      loadLookups();
+      setGenerateWarnings(result.warnings || []);
+      await loadLookups();
       setSelectedTimetableId(result.timetable_id);
     } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response
-          ?.data?.detail || "Generation failed.";
-      setGenerateMessage(message);
+      setGenerateError(errorMessage(err, "Generation failed."));
     } finally {
       setGenerating(false);
     }
   }
 
-  function nameOf(list: Lookup[], id: string) {
-    return list.find((item) => item.id === id)?.name || id;
+  function nameOf(list: Lookup[], id: string | undefined) {
+    if (!id) return "—";
+    return list.find((item) => item.id === id)?.name || "—";
   }
 
-  async function handleAddEntry() {
-    setError("");
-    if (!selectedTimetableId) {
-      setError("Select or create a timetable first.");
-      return;
-    }
-    if (Object.values(form).some((v) => !v)) {
-      setError("All fields are required.");
-      return;
-    }
-
-    try {
-      const entry = await createTimetableEntry(selectedTimetableId, form);
-      setEntries([...entries, entry]);
-    } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { detail?: string } } })?.response
-          ?.data?.detail || "Failed to add entry.";
-      setError(message);
-    }
+  function formatTime(time: string) {
+    return time?.slice(0, 5) ?? "";
   }
 
-  async function handleDeleteEntry(entryId: string) {
-    await deleteTimetableEntry(entryId);
-    setEntries(entries.filter((e) => e.id !== entryId));
+  const sectionsWithEntries = sections.filter((s) =>
+    entries.some((e) => e.section_id === s.id)
+  );
+
+  const sortedPeriods = periods
+    .slice()
+    .sort((a, b) => a.start_time.localeCompare(b.start_time));
+
+  // One cell (class/section x period) can hold more than one subject across
+  // the week when a subject runs only some days/week and shares the slot
+  // with another subject on the remaining days — group by subject+teacher
+  // and list which days each group covers.
+  function cellGroups(periodId: string, classroomId: string, sectionId: string) {
+    const matching = entries.filter(
+      (e) =>
+        e.period_id === periodId &&
+        e.classroom_id === classroomId &&
+        e.section_id === sectionId
+    );
+
+    const groups = new Map<
+      string,
+      { subjectId: string; teacherId: string; dayIds: string[] }
+    >();
+
+    for (const e of matching) {
+      const key = `${e.subject_id}__${e.teacher_id}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.dayIds.push(e.working_day_id);
+      } else {
+        groups.set(key, {
+          subjectId: e.subject_id,
+          teacherId: e.teacher_id,
+          dayIds: [e.working_day_id],
+        });
+      }
+    }
+
+    return Array.from(groups.values());
   }
 
-  const setupNeeded =
-    academicYears.length === 0 || workingDays.length === 0 || periods.length === 0;
+  function dayLabel(dayIds: string[]) {
+    return workingDays
+      .filter((d) => dayIds.includes(d.id))
+      .map((d) => d.name.slice(0, 3))
+      .join(", ");
+  }
+
+  const setupIncomplete =
+    academicYears.length === 0 ||
+    workingDays.length === 0 ||
+    periods.filter((p) => !p.is_break).length === 0;
 
   return (
     <div className="max-w-5xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Timetable</h1>
         <p className="text-sm text-muted-foreground">
-          Set up academic years, working days and periods, then build your timetable
-          manually or auto-generate it.
+          Timetables are auto-generated from your curriculum, teacher
+          assignments, and availability — no manual entry needed. The
+          generator automatically avoids teacher/class clashes, skips breaks,
+          and respects daily load limits and each subject&apos;s days/week
+          setting.
         </p>
       </div>
 
-      {setupNeeded && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Setup</CardTitle>
-            <CardDescription>
-              These need to exist before you can build a timetable.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {academicYears.length === 0 && (
-              <div className="flex items-end gap-2">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Academic year</label>
-                  <Input
-                    placeholder="e.g. 2026"
-                    value={newYearName}
-                    onChange={(e) => setNewYearName(e.target.value)}
-                    className="w-48"
-                  />
-                </div>
-                <Button onClick={handleCreateAcademicYear}>Add</Button>
-              </div>
-            )}
-
-            {workingDays.length === 0 && (
-              <div className="flex items-end gap-2">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Working day</label>
-                  <Input
-                    placeholder="e.g. Monday"
-                    value={newDayName}
-                    onChange={(e) => setNewDayName(e.target.value)}
-                    className="w-48"
-                  />
-                </div>
-                <Button onClick={handleCreateWorkingDay}>Add</Button>
-              </div>
-            )}
-
-            {periods.length === 0 && (
-              <div className="flex items-end gap-2">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Period name</label>
-                  <Input
-                    placeholder="e.g. Period 1"
-                    value={newPeriod.name}
-                    onChange={(e) =>
-                      setNewPeriod({ ...newPeriod, name: e.target.value })
-                    }
-                    className="w-40"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Start</label>
-                  <Input
-                    type="time"
-                    value={newPeriod.start_time}
-                    onChange={(e) =>
-                      setNewPeriod({ ...newPeriod, start_time: e.target.value })
-                    }
-                    className="w-32"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">End</label>
-                  <Input
-                    type="time"
-                    value={newPeriod.end_time}
-                    onChange={(e) =>
-                      setNewPeriod({ ...newPeriod, end_time: e.target.value })
-                    }
-                    className="w-32"
-                  />
-                </div>
-                <Button onClick={handleCreatePeriod}>Add</Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       <Card>
         <CardHeader>
-          <CardTitle>Timetable</CardTitle>
+          <CardTitle>Schedule setup</CardTitle>
+          <CardDescription>
+            Academic year, working days and periods apply to the whole school
+            timetable. Mark lunch/recess periods as a break below so the
+            generator skips them automatically.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Academic year</label>
+            <div className="flex flex-wrap items-end gap-2">
+              <Input
+                placeholder="e.g. 2026"
+                value={newYearName}
+                onChange={(e) => setNewYearName(e.target.value)}
+                className="w-48"
+              />
+              <Button onClick={handleCreateAcademicYear}>Add</Button>
+            </div>
+            {academicYears.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {academicYears.map((y) => (
+                  <Badge key={y.id} variant="outline">
+                    {y.name}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2 border-t pt-4">
+            <label className="text-sm font-medium">Working days</label>
+            <p className="text-xs text-muted-foreground">
+              Days the school runs classes, e.g. Monday through Friday.
+            </p>
+            <div className="flex flex-wrap items-end gap-2">
+              <Input
+                placeholder="e.g. Monday"
+                value={newDayName}
+                onChange={(e) => setNewDayName(e.target.value)}
+                className="w-48"
+              />
+              <Button onClick={handleCreateWorkingDay}>Add</Button>
+            </div>
+            {workingDays.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {workingDays.map((d) => (
+                  <span
+                    key={d.id}
+                    className="flex items-center gap-1 rounded-md border px-2 py-0.5 text-sm"
+                  >
+                    {d.name}
+                    <button
+                      onClick={() => handleDeleteWorkingDay(d.id)}
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label={`Delete ${d.name}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2 border-t pt-4">
+            <label className="text-sm font-medium">Periods &amp; breaktimes</label>
+            <p className="text-xs text-muted-foreground">
+              Define every slot in the school day, in order, including lunch or
+              recess. Tick &quot;This is a break&quot; for non-teaching slots —
+              the generator will never schedule a subject there, for any class.
+            </p>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">Name</label>
+                <Input
+                  placeholder="e.g. Period 1 or Lunch"
+                  value={newPeriod.name}
+                  onChange={(e) =>
+                    setNewPeriod({ ...newPeriod, name: e.target.value })
+                  }
+                  className="w-40"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">Start</label>
+                <Input
+                  type="time"
+                  value={newPeriod.start_time}
+                  onChange={(e) =>
+                    setNewPeriod({ ...newPeriod, start_time: e.target.value })
+                  }
+                  className="w-32"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">End</label>
+                <Input
+                  type="time"
+                  value={newPeriod.end_time}
+                  onChange={(e) =>
+                    setNewPeriod({ ...newPeriod, end_time: e.target.value })
+                  }
+                  className="w-32"
+                />
+              </div>
+              <label className="flex items-center gap-1.5 pb-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={newPeriod.is_break}
+                  onChange={(e) =>
+                    setNewPeriod({ ...newPeriod, is_break: e.target.checked })
+                  }
+                />
+                This is a break
+              </label>
+              <Button onClick={handleCreatePeriod}>Add</Button>
+            </div>
+
+            {periods.length > 0 && (
+              <div className="space-y-1 pt-2">
+                {periods
+                  .slice()
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex items-center gap-3 rounded-md border px-3 py-1.5 text-sm"
+                    >
+                      <span className="min-w-32 font-medium">{p.name}</span>
+                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={p.is_break}
+                          onChange={(e) => handleToggleBreak(p.id, e.target.checked)}
+                        />
+                        Break
+                      </label>
+                      {p.is_break && <Badge variant="secondary">Break</Badge>}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto"
+                        onClick={() => handleDeletePeriod(p.id)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          {setupIncomplete && (
+            <p className="text-sm text-amber-600">
+              Add at least one academic year, one working day, and one
+              non-break period before generating a timetable.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-primary/40">
+        <CardHeader>
+          <CardTitle>Auto-generate timetable</CardTitle>
+          <CardDescription>
+            One click builds a conflict-free timetable from your curriculum
+            (Curriculum page) and teacher assignments. It automatically
+            resolves teacher/class clashes, respects daily load limits and
+            breaks, and spreads each subject across the number of days/week
+            you set for it — so subjects taught every day and subjects taught
+            only a few days a week are both scheduled correctly.
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-3">
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Active timetable</label>
             <Select
-              value={selectedTimetableId || undefined}
+              value={selectedTimetableId}
               onValueChange={setSelectedTimetableId}
             >
               <SelectTrigger className="w-64">
@@ -326,10 +561,19 @@ export default function Page() {
             + New timetable
           </Button>
 
+          {selectedTimetableId && (
+            <Button
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              onClick={() => handleDeleteTimetable(selectedTimetableId)}
+            >
+              Delete this timetable
+            </Button>
+          )}
+
           <Button
-            variant="secondary"
             onClick={handleGenerate}
-            disabled={generating || academicYears.length === 0}
+            disabled={generating || setupIncomplete}
           >
             {generating ? "Generating..." : "Auto-generate timetable"}
           </Button>
@@ -337,165 +581,175 @@ export default function Page() {
           {generateMessage && (
             <span className="text-sm text-muted-foreground">{generateMessage}</span>
           )}
+          {generateError && (
+            <span className="text-sm text-destructive">{generateError}</span>
+          )}
         </CardContent>
+
+        {timetables.length > 0 && (
+          <CardContent className="border-t pt-4">
+            <p className="text-sm font-medium">All timetables</p>
+            <p className="text-xs text-muted-foreground">
+              Clean up old drafts you no longer need — this deletes the
+              timetable and every entry in it.
+            </p>
+            <ul className="mt-2 space-y-1">
+              {timetables.map((t) => (
+                <li
+                  key={t.id}
+                  className="flex items-center justify-between gap-2 rounded-md border px-3 py-1.5 text-sm"
+                >
+                  {renamingTimetableId === t.id ? (
+                    <div className="flex flex-1 items-center gap-2">
+                      <Input
+                        value={renameDraft}
+                        onChange={(e) => setRenameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleSaveRename(t.id);
+                          if (e.key === "Escape") handleCancelRename();
+                        }}
+                        autoFocus
+                        className="h-8"
+                      />
+                      <Button size="sm" onClick={() => handleSaveRename(t.id)}>
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleCancelRename}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <span>
+                        {t.name} ({t.status})
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleStartRename(t.id, t.name)}
+                        >
+                          Rename
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => handleDeleteTimetable(t.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        )}
+        {generateWarnings.length > 0 && (
+          <CardContent className="border-t pt-4">
+            <p className="text-sm font-medium text-amber-600">
+              {generateWarnings.length} subject(s) were skipped:
+            </p>
+            <ul className="mt-1 list-inside list-disc space-y-0.5 text-sm text-amber-600">
+              {generateWarnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          </CardContent>
+        )}
       </Card>
 
       {selectedTimetableId && (
         <Card>
           <CardHeader>
-            <CardTitle>Add entry</CardTitle>
+            <CardTitle>Generated timetable — every class</CardTitle>
             <CardDescription>
-              Conflicts (same teacher/section/period), break periods, and daily load
-              limits are rejected automatically.
+              One table for every classroom and section. Each row is a
+              class/section; each column is a period, labeled with its time
+              range. When a subject runs only some days of the week, its
+              cell lists each subject/teacher together with the days it
+              applies to. To change what gets scheduled, edit the
+              curriculum, teacher assignments, or availability and
+              re-generate.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <Select
-                value={form.working_day_id || undefined}
-                onValueChange={(v) => setForm({ ...form, working_day_id: v })}
-              >
-                <SelectTrigger className="w-36">
-                  <SelectValue placeholder="Day" />
-                </SelectTrigger>
-                <SelectContent>
-                  {workingDays.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={form.period_id || undefined}
-                onValueChange={(v) => setForm({ ...form, period_id: v })}
-              >
-                <SelectTrigger className="w-36">
-                  <SelectValue placeholder="Period" />
-                </SelectTrigger>
-                <SelectContent>
-                  {periods
-                    .filter((p) => !p.is_break)
-                    .map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={form.classroom_id || undefined}
-                onValueChange={(v) => setForm({ ...form, classroom_id: v })}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Classroom" />
-                </SelectTrigger>
-                <SelectContent>
-                  {classrooms.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={form.section_id || undefined}
-                onValueChange={(v) => setForm({ ...form, section_id: v })}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Section" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sections
-                    .filter(
-                      (s) =>
-                        !form.classroom_id || s.classroom_id === form.classroom_id
-                    )
-                    .map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={form.subject_id || undefined}
-                onValueChange={(v) => setForm({ ...form, subject_id: v })}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Subject" />
-                </SelectTrigger>
-                <SelectContent>
-                  {subjects.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={form.teacher_id || undefined}
-                onValueChange={(v) => setForm({ ...form, teacher_id: v })}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Teacher" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teachers.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Button onClick={handleAddEntry}>Add</Button>
-            </div>
-
             {error && <p className="text-sm text-destructive">{error}</p>}
 
-            {entries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No entries yet.</p>
+            {sectionsWithEntries.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No entries yet for this timetable. Generate one above.
+              </p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Day</TableHead>
-                    <TableHead>Period</TableHead>
-                    <TableHead>Classroom</TableHead>
-                    <TableHead>Section</TableHead>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Teacher</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {entries.map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell>{nameOf(workingDays, entry.working_day_id)}</TableCell>
-                      <TableCell>{nameOf(periods, entry.period_id)}</TableCell>
-                      <TableCell>{nameOf(classrooms, entry.classroom_id)}</TableCell>
-                      <TableCell>{nameOf(sections, entry.section_id)}</TableCell>
-                      <TableCell>{nameOf(subjects, entry.subject_id)}</TableCell>
-                      <TableCell>{nameOf(teachers, entry.teacher_id)}</TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteEntry(entry.id)}
-                        >
-                          Remove
-                        </Button>
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Class / Section</TableHead>
+                      {sortedPeriods.map((p) => (
+                        <TableHead key={p.id}>
+                          <div className="flex flex-col">
+                            <span>{p.name}</span>
+                            <span className="text-xs font-normal text-muted-foreground">
+                              {formatTime(p.start_time)}–{formatTime(p.end_time)}
+                            </span>
+                          </div>
+                        </TableHead>
+                      ))}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {sectionsWithEntries.map((section) => (
+                      <TableRow key={section.id}>
+                        <TableCell className="font-medium">
+                          {nameOf(classrooms, section.classroom_id)} / {section.name}
+                        </TableCell>
+                        {sortedPeriods.map((period) => {
+                          const groups = cellGroups(
+                            period.id,
+                            section.classroom_id,
+                            section.id
+                          );
+                          return (
+                            <TableCell key={period.id}>
+                              {groups.length === 0 ? (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              ) : (
+                                <div className="flex min-w-36 flex-col gap-1.5">
+                                  {groups.map((g, i) => {
+                                    const partialWeek =
+                                      groups.length > 1 ||
+                                      g.dayIds.length < workingDays.length;
+                                    return (
+                                      <div key={i}>
+                                        <div className="font-medium">
+                                          {nameOf(subjects, g.subjectId)}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                          {nameOf(teachers, g.teacherId)}
+                                          {partialWeek && (
+                                            <> ({dayLabel(g.dayIds)})</>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>

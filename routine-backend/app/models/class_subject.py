@@ -42,6 +42,20 @@ class ClassSubject(Base):
         ForeignKey("subjects.id")
     )
 
+    teacher_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("teachers.id"),
+        nullable=True
+    )
+
     periods_per_week: Mapped[int] = mapped_column(
         Integer
+    )
+
+    # Number of distinct working days this subject should be spread across
+    # each week. Null means "no constraint" (one period per day, spread
+    # across as many days as needed — today's default behaviour).
+    days_per_week: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True
     )

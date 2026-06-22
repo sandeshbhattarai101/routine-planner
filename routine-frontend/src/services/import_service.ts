@@ -1,9 +1,14 @@
 import api from "@/lib/api";
 
-export interface UploadResult {
-  filename: string;
+export interface UploadSheet {
+  name: string;
   columns: string[];
   rows: Record<string, unknown>[];
+}
+
+export interface UploadResult {
+  filename: string;
+  sheets: UploadSheet[];
 }
 
 export interface FieldMapping {

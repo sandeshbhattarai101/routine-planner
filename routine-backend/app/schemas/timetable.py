@@ -9,6 +9,10 @@ class GenerateTimetableRequest(
     academic_year_id: UUID
 
 
+class TimetableRenameRequest(BaseModel):
+    name: str
+
+
 class TimetableEntryCreate(BaseModel):
     working_day_id: UUID
     period_id: UUID

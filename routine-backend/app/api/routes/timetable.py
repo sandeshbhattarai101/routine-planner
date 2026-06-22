@@ -14,7 +14,8 @@ from app.models.timetable import Timetable
 from app.schemas.timetable import (
     GenerateTimetableRequest,
     TimetableEntryCreate,
-    TimetableEntryUpdate
+    TimetableEntryUpdate,
+    TimetableRenameRequest
 )
 
 from app.timetable.services.timetable_generator import (
@@ -98,11 +99,53 @@ def generate_timetable(
         school_id
     )
 
-    result = generator.generate(
-        request.academic_year_id
-    )
+    try:
+        result = generator.generate(
+            request.academic_year_id
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     return result
+
+
+@router.patch("/{timetable_id}")
+def rename_timetable(
+    timetable_id: UUID,
+    data: TimetableRenameRequest,
+    db: Session = Depends(get_db),
+    school_id=Depends(get_current_school_id),
+    _=Depends(school_admin_only)
+):
+    try:
+        timetable = TimetableService.rename_timetable(
+            db, school_id, timetable_id, data.name
+        )
+    except ValueError as e:
+        status_code = 404 if "not found" in str(e) else 400
+        raise HTTPException(status_code=status_code, detail=str(e))
+
+    return {
+        "id": str(timetable.id),
+        "academic_year_id": str(timetable.academic_year_id),
+        "name": timetable.name,
+        "status": timetable.status,
+    }
+
+
+@router.delete("/{timetable_id}")
+def delete_timetable(
+    timetable_id: UUID,
+    db: Session = Depends(get_db),
+    school_id=Depends(get_current_school_id),
+    _=Depends(school_admin_only)
+):
+    try:
+        TimetableService.delete_timetable(db, school_id, timetable_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return {"deleted": True}
 
 
 @router.get("/{timetable_id}")

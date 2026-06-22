@@ -19,10 +19,7 @@ router = APIRouter(
 ALLOWED_EXTENSIONS = ["xlsx", "csv"]
 
 
-def parse_xlsx(contents: bytes) -> list[dict]:
-    workbook = load_workbook(filename=io.BytesIO(contents), read_only=True, data_only=True)
-    sheet = workbook.active
-
+def parse_sheet_rows(sheet) -> list[dict]:
     rows_iter = sheet.iter_rows(values_only=True)
     try:
         header = [str(col) if col is not None else "" for col in next(rows_iter)]
@@ -38,10 +35,37 @@ def parse_xlsx(contents: bytes) -> list[dict]:
     return rows
 
 
-def parse_csv(contents: bytes) -> list[dict]:
+def parse_xlsx(contents: bytes) -> list[dict]:
+    """Parses every sheet in the workbook into {name, columns, rows}."""
+    workbook = load_workbook(filename=io.BytesIO(contents), read_only=True, data_only=True)
+
+    sheets = []
+    for sheet_name in workbook.sheetnames:
+        rows = parse_sheet_rows(workbook[sheet_name])
+        if not rows:
+            continue
+        sheets.append({
+            "name": sheet_name,
+            "columns": list(rows[0].keys()),
+            "rows": rows,
+        })
+
+    return sheets
+
+
+def parse_csv(contents: bytes, filename: str) -> list[dict]:
     text = contents.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text))
-    return [dict(row) for row in reader]
+    rows = [dict(row) for row in reader]
+
+    if not rows:
+        return []
+
+    return [{
+        "name": filename.rsplit(".", 1)[0],
+        "columns": list(rows[0].keys()),
+        "rows": rows,
+    }]
 
 
 @router.post("/")
@@ -62,16 +86,16 @@ async def upload_excel(
 
     try:
         if extension == "xlsx":
-            rows = parse_xlsx(contents)
+            sheets = parse_xlsx(contents)
         else:
-            rows = parse_csv(contents)
+            sheets = parse_csv(contents, file.filename)
     except Exception:
         raise HTTPException(
             status_code=400,
             detail="Could not parse file. Please check the file format."
         )
 
-    if not rows:
+    if not sheets:
         raise HTTPException(
             status_code=400,
             detail="File contains no data rows."
@@ -79,6 +103,5 @@ async def upload_excel(
 
     return {
         "filename": file.filename,
-        "columns": list(rows[0].keys()),
-        "rows": rows
+        "sheets": sheets,
     }
